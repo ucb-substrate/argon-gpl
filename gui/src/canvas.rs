@@ -22,6 +22,15 @@ pub struct Rect {
     pub border_color: Rgba,
 }
 
+pub fn intersect(a: &Bounds<Pixels>, b: &Bounds<Pixels>) -> Option<Bounds<Pixels>> {
+    let origin = a.origin.max(&b.origin);
+    let br = a.bottom_right().min(&b.bottom_right());
+    if origin.x >= br.x || origin.y >= br.y {
+        return None;
+    }
+    Some(Bounds::from_corners(origin, br))
+}
+
 // ~TextElement
 pub struct CanvasElement {
     inner: Entity<LayoutCanvas>,
@@ -106,7 +115,7 @@ impl Element for CanvasElement {
             .paint(bounds, window, cx, |window, _cx| {
                 window.paint_layer(bounds, |window| {
                     for r in rects {
-                        let bounds = Bounds::new(
+                        let rect_bounds = Bounds::new(
                             Point::new(scale * Pixels(r.x0), scale * Pixels(r.y0))
                                 + offset
                                 + bounds.origin,
@@ -116,14 +125,20 @@ impl Element for CanvasElement {
                             ShapeFill::Solid => solid_background(r.color),
                             ShapeFill::Stippling => pattern_slash(r.color.into(), 1., 9.),
                         };
-                        window.paint_quad(PaintQuad {
-                            bounds,
-                            corner_radii: Corners::all(Pixels(0.)),
-                            background,
-                            border_widths: Edges::all(Pixels(2.)),
-                            border_color: r.border_color.into(),
-                            border_style: BorderStyle::Solid,
-                        });
+                        if let Some(clipped) = intersect(&rect_bounds, &bounds) {
+                            let left_border =
+                                f32::clamp((rect_bounds.left().0 + 2.) - bounds.left().0, 0., 2.);
+                            let mut border_widths = Edges::all(Pixels(2.));
+                            border_widths.left = Pixels(left_border);
+                            window.paint_quad(PaintQuad {
+                                bounds: clipped,
+                                corner_radii: Corners::all(Pixels(0.)),
+                                background,
+                                border_widths,
+                                border_color: r.border_color.into(),
+                                border_style: BorderStyle::Solid,
+                            });
+                        }
                     }
                 })
             });
@@ -152,36 +167,49 @@ impl Render for LayoutCanvas {
 }
 
 pub(crate) fn test_canvas() -> LayoutCanvas {
+    let mut rects = Vec::new();
+    for i in 0..1000 {
+        rects.push(Rect {
+            x0: (i as f32) * 40.,
+            y0: 0.0,
+            x1: (i as f32) * 40. + 20.,
+            y1: 200.,
+            color: rgb(0x00ff00),
+            fill: ShapeFill::Stippling,
+            border_color: rgb(0x00ff00),
+        });
+    }
+    rects.extend([
+        Rect {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 100.,
+            y1: 40.,
+            color: rgb(0xff),
+            fill: ShapeFill::Stippling,
+            border_color: rgb(0xff),
+        },
+        Rect {
+            x0: 70.,
+            y0: 10.,
+            x1: 90.,
+            y1: 30.,
+            color: rgb(0x5e00e6),
+            fill: ShapeFill::Solid,
+            border_color: rgb(0x5e00e6),
+        },
+        Rect {
+            x0: 60.,
+            y0: 0.,
+            x1: 100.,
+            y1: 100.,
+            color: rgb(0xff00ff),
+            fill: ShapeFill::Stippling,
+            border_color: rgb(0xff00ff),
+        },
+    ]);
     LayoutCanvas {
-        rects: vec![
-            Rect {
-                x0: 0.0,
-                y0: 0.0,
-                x1: 100.,
-                y1: 40.,
-                color: rgb(0xff),
-                fill: ShapeFill::Stippling,
-                border_color: rgb(0xff),
-            },
-            Rect {
-                x0: 70.,
-                y0: 10.,
-                x1: 90.,
-                y1: 30.,
-                color: rgb(0x5e00e6),
-                fill: ShapeFill::Solid,
-                border_color: rgb(0x5e00e6),
-            },
-            Rect {
-                x0: 60.,
-                y0: 0.,
-                x1: 100.,
-                y1: 100.,
-                color: rgb(0xff00ff),
-                fill: ShapeFill::Stippling,
-                border_color: rgb(0xff00ff),
-            },
-        ],
+        rects,
         offset: Point::new(Pixels(0.), Pixels(0.)),
         bg_style: Style {
             size: Size {
