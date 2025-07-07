@@ -3,10 +3,6 @@ name = "gui"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "Argon"
-path = "src/main.rs"
-
 [dependencies]
 gpui = { git = "https://github.com/ucb-substrate/zed", branch = "argon-dev" }
 smallvec = "1"

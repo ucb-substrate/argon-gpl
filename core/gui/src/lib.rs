@@ -11,7 +11,7 @@ pub mod project;
 pub mod theme;
 pub mod toolbars;
 
-fn main() {
+pub fn main() {
     Application::new().run(|cx: &mut App| {
         // Load fonts.
         cx.text_system()
