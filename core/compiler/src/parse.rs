@@ -4,33 +4,52 @@ use anyhow::{bail, Context};
 use lrlex::lrlex_mod;
 use lrpar::lrpar_mod;
 
-lrlex_mod!("cadlang.l");
-lrpar_mod!("cadlang.y");
+use crate::ast::{Ast, AstMetadata};
 
-pub use cadlang_y::*;
+lrlex_mod!("argon.l");
+lrpar_mod!("argon.y");
 
-pub struct CadlangAst<'a> {
-    pub decls: Vec<Decl<'a>>,
+pub struct ParseMetadata;
+pub type ParseAst<'a> = Ast<'a, ParseMetadata>;
+
+impl AstMetadata for ParseMetadata {
+    type Ident = ();
+    type EnumDecl = ();
+    type CellDecl = ();
+    type ConstantDecl = ();
+    type LetBinding = ();
+    type IfExpr = ();
+    type BinOpExpr = ();
+    type ComparisonExpr = ();
+    type FieldAccessExpr = ();
+    type EnumValue = ();
+    type CallExpr = ();
+    type EmitExpr = ();
+    type Args = ();
+    type KwArgValue = ();
+    type ArgDecl = ();
+    type Typ = ();
+    type VarExpr = ();
 }
 
-pub fn parse(input: &str) -> Result<CadlangAst<'_>, anyhow::Error> {
-    // Get the `LexerDef` for the `cadlang` language.
-    let lexerdef = cadlang_l::lexerdef();
+pub fn parse(input: &str) -> Result<Ast<'_, ParseMetadata>, anyhow::Error> {
+    // Get the `LexerDef` for the `argon` language.
+    let lexerdef = argon_l::lexerdef();
     // Now we create a lexer with the `lexer` method with which
     // we can lex an input.
     let lexer = lexerdef.lexer(input);
     // Pass the lexer to the parser and lex and parse the input.
-    let (res, errs) = cadlang_y::parse(&lexer);
+    let (res, errs) = argon_y::parse(&lexer);
     if !errs.is_empty() {
         let mut err = String::new();
         for e in errs {
-            write!(&mut err, "{}", e.pp(&lexer, &cadlang_y::token_epp))
+            write!(&mut err, "{}", e.pp(&lexer, &argon_y::token_epp))
                 .with_context(|| "failed to write to string buffer")?;
         }
         bail!("{err}");
     }
     match res {
-        Some(Ok(decls)) => Ok(CadlangAst { decls }),
+        Some(Ok(decls)) => Ok(Ast { decls }),
         _ => bail!("Unable to evaluate expression."),
     }
 }
