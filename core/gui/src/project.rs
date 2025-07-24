@@ -1,16 +1,17 @@
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::net::TcpStream;
 use std::path::PathBuf;
 
-use compiler::compile::{CompileInput, CompiledCell, SolvedValue, compile};
+use compiler::compile::{CompileInput, CompiledCell, compile};
 use compiler::parse::parse;
 use gpui::*;
 use itertools::Itertools;
 
 use crate::canvas::Rect;
+use crate::socket::GuiToLsp;
 use crate::{
     canvas::{LayoutCanvas, ShapeFill},
-    text::TextDisplay,
     theme::THEME,
     toolbars::{SideBar, TitleBar, ToolBar},
 };
@@ -34,20 +35,16 @@ pub struct ProjectState {
     pub selected_rect: Option<usize>,
     pub layers: Vec<Entity<LayerState>>,
     pub subscriptions: Vec<Subscription>,
+    pub lsp_client: Option<GuiToLsp<TcpStream>>,
 }
 
 pub struct Project {
     pub state: Entity<ProjectState>,
     pub sidebar: Entity<SideBar>,
     pub canvas: Entity<LayoutCanvas>,
-    pub text: Entity<TextDisplay>,
 }
 
-fn get_rects(
-    cx: &mut App,
-    solved_cell: &CompiledCell,
-    layers: &Vec<Entity<LayerState>>,
-) -> Vec<Rect> {
+fn get_rects(cx: &mut App, solved_cell: &CompiledCell, layers: &[Entity<LayerState>]) -> Vec<Rect> {
     solved_cell
         .values
         .iter()
@@ -88,6 +85,7 @@ impl Project {
         path: PathBuf,
         cell: String,
         params: HashMap<String, f64>,
+        lsp_client: Option<GuiToLsp<TcpStream>>,
     ) -> Self {
         let code = std::fs::read_to_string(&path).expect("failed to read file");
         let ast = parse(&code).expect("failed to parse Argon");
@@ -110,11 +108,12 @@ impl Project {
                 let mut s = DefaultHasher::new();
                 name.hash(&mut s);
                 let hash = s.finish() as usize;
+                let color = rgb([0xff0000, 0x0ff000, 0x00ff00, 0x000ff0, 0x0000ff][hash % 5]);
                 cx.new(|_cx| LayerState {
                     name,
-                    color: rgb([0xff0000, 0x00ff00, 0x0000ff][hash % 3]),
+                    color,
                     fill: ShapeFill::Stippling,
-                    border_color: rgb([0xff0000, 0x00ff00, 0x0000ff][hash % 3]),
+                    border_color: color,
                     visible: true,
                     z,
                 })
@@ -141,18 +140,17 @@ impl Project {
                 selected_rect: None,
                 layers,
                 subscriptions,
+                lsp_client,
             }
         });
 
         let sidebar = cx.new(|cx| SideBar::new(cx, &state));
         let canvas = cx.new(|cx| LayoutCanvas::new(cx, &state));
-        let text = cx.new(|cx| TextDisplay::new(cx, &state));
 
         Self {
             state,
             sidebar,
             canvas,
-            text,
         }
     }
 }
@@ -194,8 +192,7 @@ impl Render for Project {
                     .flex_1()
                     .min_h_0()
                     .child(self.sidebar.clone())
-                    .child(self.canvas.clone())
-                    .child(self.text.clone()),
+                    .child(self.canvas.clone()),
             )
     }
 }

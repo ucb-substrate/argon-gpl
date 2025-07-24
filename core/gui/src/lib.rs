@@ -1,18 +1,20 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
+use std::net::TcpStream;
 use std::path::PathBuf;
+use std::{borrow::Cow, net::SocketAddr};
 
 use clap::Parser;
 use gpui::*;
 use itertools::Itertools;
 use project::Project;
+use socket::GuiToLsp;
 
 use crate::assets::{ZED_PLEX_MONO, ZED_PLEX_SANS};
 
 pub mod assets;
 pub mod canvas;
 pub mod project;
-pub mod text;
+pub mod socket;
 pub mod theme;
 pub mod toolbars;
 
@@ -22,6 +24,8 @@ struct Args {
     file: PathBuf,
     cell: String,
     params: Vec<String>,
+    #[arg(long)]
+    lsp_addr: Option<SocketAddr>,
 }
 
 pub fn main() {
@@ -39,6 +43,9 @@ pub fn main() {
             .expect("failed to parse param value as i64");
         params.insert(terms[0].to_string(), v);
     }
+    let lsp_client = args
+        .lsp_addr
+        .map(|addr| GuiToLsp::new(TcpStream::connect(addr).unwrap()));
 
     Application::new().run(|cx: &mut App| {
         // Load fonts.
@@ -71,7 +78,7 @@ pub fn main() {
             },
             |window, cx| {
                 window.replace_root(cx, |_window, cx| {
-                    Project::new(cx, args.file, args.cell, params)
+                    Project::new(cx, args.file, args.cell, params, lsp_client)
                 })
             },
         )

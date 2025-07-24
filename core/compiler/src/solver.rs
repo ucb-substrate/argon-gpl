@@ -1,17 +1,8 @@
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    ops::Sub,
-};
+use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
-use approx::{assert_abs_diff_eq, assert_relative_eq, relative_eq};
-use arcstr::ArcStr;
-use ena::unify::{InPlaceUnificationTable, UnifyKey};
+use approx::relative_eq;
 use itertools::{Either, Itertools};
-use nalgebra::{DMatrix, DVector, MatrixMN};
-use serde::{Deserialize, Serialize};
-
-type Layer = ArcStr;
+use nalgebra::{DMatrix, DVector};
 
 const EPSILON: f64 = 1e-10;
 
@@ -195,6 +186,7 @@ impl From<f64> for LinearExpr {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_relative_eq;
 
     #[test]
     fn linear_constraints_solved_correctly() {
@@ -213,6 +205,6 @@ mod tests {
         solver.solve();
         assert_relative_eq!(*solver.solved_vars.get(&x).unwrap(), 5., epsilon = EPSILON);
         assert_relative_eq!(*solver.solved_vars.get(&y).unwrap(), 5., epsilon = EPSILON);
-        assert!(solver.solved_vars.get(&z).is_none());
+        assert!(!solver.solved_vars.contains_key(&z));
     }
 }

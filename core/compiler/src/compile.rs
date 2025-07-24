@@ -2,9 +2,8 @@
 //!
 //! Pass 1: assign variable IDs/type checking
 //! Pass 3: solving
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use anyhow::Result;
 use derive_where::derive_where;
 use enumify::enumify;
 use indexmap::IndexSet;
@@ -15,7 +14,7 @@ use crate::ast::{BinOp, ConstantDecl, FieldAccessExpr, FnDecl, Scope, UnaryOp};
 use crate::{
     ast::{
         ArgDecl, Ast, AstMetadata, AstTransformer, BinOpExpr, CallExpr, CellDecl, ComparisonExpr,
-        Decl, EmitExpr, EnumValue, Expr, FloatLiteral, Ident, IfExpr, LetBinding, Statement,
+        Decl, EnumValue, Expr, Ident, IfExpr, LetBinding, Statement,
     },
     parse::ParseMetadata,
     solver::{LinearExpr, Solver, Var},
@@ -29,8 +28,8 @@ pub fn compile(input: CompileInput<'_, ParseMetadata>) -> CompiledCell {
         cell: input.cell,
         params: input.params,
     };
-    let cell = ExecPass::new().execute(input);
-    cell
+
+    ExecPass::new().execute(input)
 }
 
 pub(crate) struct VarIdTyPass<'a> {
@@ -39,7 +38,7 @@ pub(crate) struct VarIdTyPass<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct VarIdTyMetadata;
+pub struct VarIdTyMetadata;
 
 #[enumify]
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -206,27 +205,27 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
         &mut self,
         _input: &crate::ast::EnumDecl<'a, Self::Input>,
         _name: &Ident<'a, Self::Output>,
-        _variants: &Vec<Ident<'a, Self::Output>>,
+        _variants: &[Ident<'a, Self::Output>],
     ) -> <Self::Output as AstMetadata>::EnumDecl {
     }
 
     fn dispatch_cell_decl(
         &mut self,
-        input: &CellDecl<'a, Self::Input>,
-        name: &Ident<'a, Self::Output>,
-        args: &Vec<ArgDecl<'a, Self::Output>>,
-        stmts: &Vec<Statement<'a, Self::Output>>,
+        _input: &CellDecl<'a, Self::Input>,
+        _name: &Ident<'a, Self::Output>,
+        _args: &[ArgDecl<'a, Self::Output>],
+        _stmts: &[Statement<'a, Self::Output>],
     ) -> <Self::Output as AstMetadata>::CellDecl {
         // TODO: Argument checks
     }
 
     fn dispatch_fn_decl(
         &mut self,
-        input: &FnDecl<'a, Self::Input>,
+        _input: &FnDecl<'a, Self::Input>,
         name: &Ident<'a, Self::Output>,
-        args: &Vec<ArgDecl<'a, Self::Output>>,
-        return_ty: &Ident<'a, Self::Output>,
-        scope: &Scope<'a, Self::Output>,
+        _args: &[ArgDecl<'a, Self::Output>],
+        _return_ty: &Ident<'a, Self::Output>,
+        _scope: &Scope<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::FnDecl {
         // UNUSED
         self.lookup(name.name).unwrap().0
@@ -258,16 +257,16 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_constant_decl(
         &mut self,
-        input: &ConstantDecl<'a, Self::Input>,
-        name: &Ident<'a, Self::Output>,
-        ty: &Ident<'a, Self::Output>,
-        value: &Expr<'a, Self::Output>,
+        _input: &ConstantDecl<'a, Self::Input>,
+        _name: &Ident<'a, Self::Output>,
+        _ty: &Ident<'a, Self::Output>,
+        _value: &Expr<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::ConstantDecl {
     }
 
     fn dispatch_if_expr(
         &mut self,
-        input: &IfExpr<'a, Self::Input>,
+        _input: &IfExpr<'a, Self::Input>,
         cond: &Expr<'a, Self::Output>,
         then: &Expr<'a, Self::Output>,
         else_: &Expr<'a, Self::Output>,
@@ -282,7 +281,7 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_bin_op_expr(
         &mut self,
-        input: &BinOpExpr<'a, Self::Input>,
+        _input: &BinOpExpr<'a, Self::Input>,
         left: &Expr<'a, Self::Output>,
         right: &Expr<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::BinOpExpr {
@@ -314,7 +313,7 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_comparison_expr(
         &mut self,
-        input: &ComparisonExpr<'a, Self::Input>,
+        _input: &ComparisonExpr<'a, Self::Input>,
         left: &Expr<'a, Self::Output>,
         right: &Expr<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::ComparisonExpr {
@@ -326,7 +325,7 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_field_access_expr(
         &mut self,
-        input: &crate::ast::FieldAccessExpr<'a, Self::Input>,
+        _input: &crate::ast::FieldAccessExpr<'a, Self::Input>,
         base: &Expr<'a, Self::Output>,
         field: &Ident<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::FieldAccessExpr {
@@ -342,15 +341,15 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_enum_value(
         &mut self,
-        input: &EnumValue<'a, Self::Input>,
-        name: &Ident<'a, Self::Output>,
-        variant: &Ident<'a, Self::Output>,
+        _input: &EnumValue<'a, Self::Input>,
+        _name: &Ident<'a, Self::Output>,
+        _variant: &Ident<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::EnumValue {
     }
 
     fn dispatch_call_expr(
         &mut self,
-        input: &crate::ast::CallExpr<'a, Self::Input>,
+        _input: &crate::ast::CallExpr<'a, Self::Input>,
         func: &Ident<'a, Self::Output>,
         args: &crate::ast::Args<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::CallExpr {
@@ -397,25 +396,24 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_emit_expr(
         &mut self,
-        input: &crate::ast::EmitExpr<'a, Self::Input>,
+        _input: &crate::ast::EmitExpr<'a, Self::Input>,
         value: &Expr<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::EmitExpr {
-        let ty = value.ty();
-        ty
+        value.ty()
     }
 
     fn dispatch_args(
         &mut self,
-        input: &crate::ast::Args<'a, Self::Input>,
-        posargs: &Vec<Expr<'a, Self::Output>>,
-        kwargs: &Vec<crate::ast::KwArgValue<'a, Self::Output>>,
+        _input: &crate::ast::Args<'a, Self::Input>,
+        _posargs: &[Expr<'a, Self::Output>],
+        _kwargs: &[crate::ast::KwArgValue<'a, Self::Output>],
     ) -> <Self::Output as AstMetadata>::Args {
     }
 
     fn dispatch_cast(
         &mut self,
-        input: &crate::ast::CastExpr<'a, Self::Input>,
-        value: &Expr<'a, Self::Output>,
+        _input: &crate::ast::CastExpr<'a, Self::Input>,
+        _value: &Expr<'a, Self::Output>,
         ty: &Ident<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::CastExpr {
         Ty::from_name(ty.name)
@@ -423,8 +421,8 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_kw_arg_value(
         &mut self,
-        input: &crate::ast::KwArgValue<'a, Self::Input>,
-        name: &Ident<'a, Self::Output>,
+        _input: &crate::ast::KwArgValue<'a, Self::Input>,
+        _name: &Ident<'a, Self::Output>,
         value: &Expr<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::KwArgValue {
         value.ty()
@@ -433,8 +431,8 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
     fn dispatch_arg_decl(
         &mut self,
         input: &ArgDecl<'a, Self::Input>,
-        name: &Ident<'a, Self::Output>,
-        ty: &Ident<'a, Self::Output>,
+        _name: &Ident<'a, Self::Output>,
+        _ty: &Ident<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::ArgDecl {
         let ty = Ty::from_name(input.ty.name);
         (self.alloc(input.name.name, ty.clone()), ty)
@@ -442,8 +440,8 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_scope(
         &mut self,
-        input: &Scope<'a, Self::Input>,
-        stmts: &Vec<Statement<'a, Self::Output>>,
+        _input: &Scope<'a, Self::Input>,
+        _stmts: &[Statement<'a, Self::Output>],
         tail: &Option<Expr<'a, Self::Output>>,
     ) -> <Self::Output as AstMetadata>::Scope {
         tail.as_ref().map(|tail| tail.ty()).unwrap_or(Ty::Nil)
@@ -463,7 +461,7 @@ impl<'a> AstTransformer<'a> for VarIdTyPass<'a> {
 
     fn dispatch_let_binding(
         &mut self,
-        input: &LetBinding<'a, Self::Input>,
+        _input: &LetBinding<'a, Self::Input>,
         name: &Ident<'a, Self::Output>,
         value: &Expr<'a, Self::Output>,
     ) -> <Self::Output as AstMetadata>::LetBinding {
@@ -514,8 +512,6 @@ struct ExecPass<'a> {
     emit: Vec<ValueId>,
     frames: HashMap<FrameId, Frame>,
     nil_value: ValueId,
-    true_value: ValueId,
-    false_value: ValueId,
     global_frame: FrameId,
     next_id: u64,
     solve_iters: u64,
@@ -525,19 +521,13 @@ impl<'a> ExecPass<'a> {
     pub(crate) fn new() -> Self {
         Self {
             solver: Solver::new(),
-            values: HashMap::from_iter([
-                (1, DeferValue::Ready(Value::None)),
-                (2, DeferValue::Ready(Value::Bool(true))),
-                (3, DeferValue::Ready(Value::Bool(false))),
-            ]),
+            values: HashMap::from_iter([(1, DeferValue::Ready(Value::None))]),
             deferred: Default::default(),
             frames: HashMap::from_iter([(0, Frame::default())]),
             emit: Default::default(),
             nil_value: 1,
-            true_value: 2,
-            false_value: 3,
             global_frame: 0,
-            next_id: 4,
+            next_id: 2,
             solve_iters: 0,
         }
     }
@@ -589,17 +579,14 @@ impl<'a> ExecPass<'a> {
                 let value = value.as_ref().unwrap_ready();
                 match value {
                     Value::Linear(l) => SolvedValue::Float(self.solver.eval_expr(l).unwrap()),
-                    Value::Rect(rect) => {
-                        let rect = SolvedValue::Rect(Rect {
-                            layer: rect.layer.clone(),
-                            x0: self.solver.value_of(rect.x0).unwrap(),
-                            y0: self.solver.value_of(rect.y0).unwrap(),
-                            x1: self.solver.value_of(rect.x1).unwrap(),
-                            y1: self.solver.value_of(rect.y1).unwrap(),
-                            source: rect.source.clone(),
-                        });
-                        rect
-                    }
+                    Value::Rect(rect) => SolvedValue::Rect(Rect {
+                        layer: rect.layer.clone(),
+                        x0: self.solver.value_of(rect.x0).unwrap(),
+                        y0: self.solver.value_of(rect.y0).unwrap(),
+                        x1: self.solver.value_of(rect.x1).unwrap(),
+                        y1: self.solver.value_of(rect.y1).unwrap(),
+                        source: rect.source.clone(),
+                    }),
                     _ => unimplemented!(),
                 }
             })
@@ -618,6 +605,12 @@ impl<'a> ExecPass<'a> {
     }
 
     fn frame_id(&mut self) -> FrameId {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
+    }
+
+    fn alloc_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
         id
@@ -819,7 +812,7 @@ impl<'a> ExecPass<'a> {
         let progress = match &mut vref.state {
             PartialEvalState::Call(c) => match c.expr.func.name {
                 "crect" | "rect" => {
-                    let layer = c.state.posargs.get(0).map(|vid| {
+                    let layer = c.state.posargs.first().map(|vid| {
                         self.values[vid]
                             .as_ref()
                             .get_ready()
@@ -837,7 +830,10 @@ impl<'a> ExecPass<'a> {
                             y0: self.solver.new_var(),
                             x1: self.solver.new_var(),
                             y1: self.solver.new_var(),
-                            source: None,
+                            source: Some(SourceInfo {
+                                span: c.expr.span,
+                                id: self.alloc_id(),
+                            }),
                         };
                         self.values
                             .insert(vid, Defer::Ready(Value::Rect(rect.clone())));
@@ -927,8 +923,7 @@ impl<'a> ExecPass<'a> {
                 }
                 f => {
                     panic!(
-                        "user function calls should never be deferred: attempted to partial_eval {}",
-                        f
+                        "user function calls should never be deferred: attempted to partial_eval {f}"
                     );
                 }
             },
@@ -1093,13 +1088,10 @@ impl<'a> ExecPass<'a> {
                             Some(Value::Linear(LinearExpr::from(*x as f64)))
                         }
                         (x @ Value::Int(_), Ty::Int) => Some(x.clone()),
-                        (Value::Linear(expr), Ty::Int) => {
-                            if let Some(val) = self.solver.eval_expr(expr) {
-                                Some(Value::Int(val as i64))
-                            } else {
-                                None
-                            }
-                        }
+                        (Value::Linear(expr), Ty::Int) => self
+                            .solver
+                            .eval_expr(expr)
+                            .map(|val| Value::Int(val as i64)),
                         (expr @ Value::Linear(_), Ty::Float) => Some(expr.clone()),
                         _ => panic!("invalid cast"),
                     };
@@ -1113,14 +1105,11 @@ impl<'a> ExecPass<'a> {
                     false
                 }
             }
-            _ => todo!(),
         };
 
-        if !self.values.contains_key(&vid) {
-            self.values.insert(vid, v);
-        }
+        self.values.entry(vid).or_insert(v);
         if self.values[&vid].is_ready() {
-            self.deferred.remove(&vid);
+            self.deferred.swap_remove(&vid);
         }
         progress
     }
@@ -1157,18 +1146,12 @@ enum Defer<R, D> {
     Deferred(D),
 }
 
-type DeferValue<'a, T: AstMetadata> = Defer<Value<'a>, PartialEval<'a, T>>;
+type DeferValue<'a, T> = Defer<Value<'a>, PartialEval<'a, T>>;
 
 #[derive(Debug, Clone)]
 struct PartialEval<'a, T: AstMetadata> {
     state: PartialEvalState<'a, T>,
     frame: FrameId,
-}
-
-#[derive(Clone)]
-struct ProgressPredicate {
-    // sum of products
-    terms: Vec<Vec<ConstraintVarId>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1177,8 +1160,6 @@ enum PartialEvalState<'a, T: AstMetadata> {
     Comparison(Box<PartialComparisonExpr<'a, T>>),
     BinOp(PartialBinOp),
     Call(Box<PartialCallExpr<'a, T>>),
-    Emit(ValueId),
-    EnumValue(EnumValue<'a, T>),
     FieldAccess(Box<PartialFieldAccessExpr<'a, T>>),
     Constraint(PartialConstraint),
     Cast(PartialCast),
@@ -1226,12 +1207,6 @@ struct PartialCallExpr<'a, T: AstMetadata> {
 pub struct CallExprState {
     posargs: Vec<ValueId>,
     kwargs: Vec<ValueId>,
-}
-
-#[derive(Debug, Clone)]
-pub struct BinOpExprState<'a, T: AstMetadata> {
-    left: PartialEval<'a, T>,
-    right: PartialEval<'a, T>,
 }
 
 #[derive(Debug, Clone)]
