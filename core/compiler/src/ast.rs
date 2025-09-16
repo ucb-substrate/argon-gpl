@@ -12,6 +12,7 @@ pub struct Ast<'a, T: AstMetadata> {
 #[derive_where(Debug, Clone)]
 pub enum Decl<'a, T: AstMetadata> {
     Enum(EnumDecl<'a, T>),
+    Struct(StructDecl<'a, T>),
     Constant(ConstantDecl<'a, T>),
     Cell(CellDecl<'a, T>),
     Fn(FnDecl<'a, T>),
@@ -41,6 +42,22 @@ pub struct EnumDecl<'a, T: AstMetadata> {
     pub name: Ident<'a, T>,
     pub variants: Vec<Ident<'a, T>>,
     pub metadata: T::EnumDecl,
+}
+
+#[derive_where(Debug, Clone)]
+pub struct StructDecl<'a, T: AstMetadata> {
+    pub name: Ident<'a, T>,
+    pub fields: Vec<StructField<'a, T>>,
+    pub span: Span,
+    pub metadata: T::StructDecl,
+}
+
+#[derive_where(Debug, Clone)]
+pub struct StructField<'a, T: AstMetadata> {
+    pub name: Ident<'a, T>,
+    pub ty: Ident<'a, T>,
+    pub span: Span,
+    pub metadata: T::StructField,
 }
 
 #[derive_where(Debug, Clone)]
@@ -271,6 +288,8 @@ pub trait AstMetadata {
     type Ident: Debug + Clone;
     type VarExpr: Debug + Clone;
     type EnumDecl: Debug + Clone;
+    type StructDecl: Debug + Clone;
+    type StructField: Debug + Clone;
     type CellDecl: Debug + Clone;
     type FnDecl: Debug + Clone;
     type ConstantDecl: Debug + Clone;

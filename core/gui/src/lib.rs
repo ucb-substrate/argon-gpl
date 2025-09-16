@@ -4,50 +4,29 @@ use std::path::PathBuf;
 use std::{borrow::Cow, net::SocketAddr};
 
 use clap::Parser;
+use editor::Editor;
 use gpui::*;
 use itertools::Itertools;
-use project::Project;
-use socket::GuiToLsp;
+use lsp_server::rpc::GuiToLspClient;
 
 use crate::assets::{ZED_PLEX_MONO, ZED_PLEX_SANS};
 
 pub mod assets;
-pub mod canvas;
+pub mod editor;
 pub mod project;
-pub mod socket;
+pub mod rpc;
 pub mod theme;
-pub mod toolbars;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    file: PathBuf,
-    cell: String,
-    params: Vec<String>,
-    #[arg(long)]
-    lsp_addr: Option<SocketAddr>,
+    lsp_addr: SocketAddr,
 }
 
 pub fn main() {
     let args = Args::parse();
-    let mut params = HashMap::new();
-    for p in args.params {
-        let terms = p.split('=').collect_vec();
-        assert_eq!(
-            terms.len(),
-            2,
-            "param values must follow `name=value` syntax"
-        );
-        let v = terms[1]
-            .parse()
-            .expect("failed to parse param value as i64");
-        params.insert(terms[0].to_string(), v);
-    }
-    let lsp_client = args
-        .lsp_addr
-        .map(|addr| GuiToLsp::new(TcpStream::connect(addr).unwrap()));
 
-    Application::new().run(|cx: &mut App| {
+    Application::new().run(move |cx: &mut App| {
         // Load fonts.
         cx.text_system()
             .add_fonts(vec![
@@ -76,11 +55,7 @@ pub fn main() {
                 }),
                 ..Default::default()
             },
-            |window, cx| {
-                window.replace_root(cx, |_window, cx| {
-                    Project::new(cx, args.file, args.cell, params, lsp_client)
-                })
-            },
+            |window, cx| window.replace_root(cx, |_window, cx| Editor::new(cx, args.lsp_addr)),
         )
         .unwrap();
     });
