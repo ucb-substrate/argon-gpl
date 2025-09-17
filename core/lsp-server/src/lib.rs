@@ -12,7 +12,7 @@ use rpc::{GuiToLsp, LspServer, LspToGuiClient};
 use serde_json::Value;
 use tarpc::{
     context,
-    server::{self, incoming::Incoming, Channel},
+    server::{self, Channel, incoming::Incoming},
     tokio_serde::formats::Json,
 };
 use tokio::net::TcpListener;

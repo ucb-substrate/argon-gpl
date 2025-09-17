@@ -1,6 +1,5 @@
 use std::io::{self, BufRead, Write};
 
-
 pub mod ast;
 pub mod compile;
 pub mod parse;
@@ -31,7 +30,6 @@ pub fn main() {
 mod tests {
     use std::collections::HashMap;
 
-    
     use parse::parse;
 
     use crate::compile::{CompileInput, VarIdTyPass, compile};
@@ -66,6 +64,14 @@ cell simple(y_enclosure: int) {
         env!("CARGO_MANIFEST_DIR"),
         "/examples/via_array.ar"
     ));
+    const ARGON_FUNC_OUT_OF_ORDER: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/examples/func_out_of_order.ar"
+    ));
+    const ARGON_HIERARCHY: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/examples/hierarchy.ar"
+    ));
     const ARGON_SKY130_INVERTER: &str = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/examples/sky130_inverter.ar"
@@ -74,67 +80,104 @@ cell simple(y_enclosure: int) {
     #[test]
     fn argon_scopes() {
         let ast = parse(ARGON_SCOPES).expect("failed to parse Argon");
-        let pass = VarIdTyPass::new();
-        let x = pass.execute(CompileInput {
-            cell: "scopes",
-            ast: &ast,
-            params: HashMap::new(),
-        });
-        println!("{x:?}");
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "scopes",
+                params: HashMap::new(),
+            },
+        );
+        println!("{cell:?}");
     }
 
     #[test]
     fn argon_immediate() {
         let ast = parse(ARGON_IMMEDIATE).expect("failed to parse Argon");
-        let cell = compile(CompileInput {
-            cell: "immediate",
-            ast: &ast,
-            params: HashMap::new(),
-        });
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "immediate",
+                params: HashMap::new(),
+            },
+        );
         println!("{cell:?}");
     }
 
     #[test]
     fn argon_if() {
         let ast = parse(ARGON_IF).expect("failed to parse Argon");
-        let cell = compile(CompileInput {
-            cell: "if_test",
-            ast: &ast,
-            params: HashMap::new(),
-        });
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "if_test",
+                params: HashMap::new(),
+            },
+        );
         println!("{cell:?}");
     }
 
     #[test]
     fn argon_if_inconsistent() {
         let ast = parse(ARGON_IF_INCONSISTENT).expect("failed to parse Argon");
-        let cell = compile(CompileInput {
-            cell: "if_test",
-            ast: &ast,
-            params: HashMap::new(),
-        });
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "if_test",
+                params: HashMap::new(),
+            },
+        );
         println!("{cell:?}");
     }
 
     #[test]
     fn argon_via() {
         let ast = parse(ARGON_VIA).expect("failed to parse Argon");
-        let cell = compile(CompileInput {
-            cell: "via",
-            ast: &ast,
-            params: HashMap::new(),
-        });
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "via",
+                params: HashMap::new(),
+            },
+        );
         println!("{cell:?}");
     }
 
     #[test]
     fn argon_via_array() {
         let ast = parse(ARGON_VIA_ARRAY).expect("failed to parse Argon");
-        let cell = compile(CompileInput {
-            cell: "vias",
-            ast: &ast,
-            params: HashMap::new(),
-        });
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "vias",
+                params: HashMap::new(),
+            },
+        );
+        println!("{cell:?}");
+    }
+
+    #[test]
+    fn argon_func_out_of_order() {
+        let ast = parse(ARGON_FUNC_OUT_OF_ORDER).expect("failed to parse Argon");
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "test",
+                params: HashMap::new(),
+            },
+        );
+        println!("{cell:?}");
+    }
+
+    #[test]
+    fn argon_hierarchy() {
+        let ast = parse(ARGON_HIERARCHY).expect("failed to parse Argon");
+        let cell = compile(
+            &ast,
+            CompileInput {
+                cell: "top",
+                params: HashMap::new(),
+            },
+        );
         println!("{cell:?}");
     }
 
