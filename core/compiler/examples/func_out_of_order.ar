@@ -3,7 +3,7 @@ fn first(x: Float) -> Float {
 }
 
 fn second(x: Float) -> Float {
-    2 * x
+    2. * x
 }
 
 cell test() {
