@@ -79,7 +79,9 @@ mod tests {
 
     #[test]
     fn argon_scopes() {
-        let ast = parse_workspace_with_std(ARGON_SCOPES).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_SCOPES);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cell = compile(
             &ast,
             CompileInput {
@@ -93,7 +95,9 @@ mod tests {
 
     #[test]
     fn argon_immediate() {
-        let ast = parse_workspace_with_std(ARGON_IMMEDIATE).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_IMMEDIATE);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cell = compile(
             &ast,
             CompileInput {
@@ -107,7 +111,9 @@ mod tests {
 
     #[test]
     fn argon_if() {
-        let ast = parse_workspace_with_std(ARGON_IF).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_IF);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cell = compile(
             &ast,
             CompileInput {
@@ -121,7 +127,9 @@ mod tests {
 
     #[test]
     fn argon_if_inconsistent() {
-        let ast = parse_workspace_with_std(ARGON_IF_INCONSISTENT).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_IF_INCONSISTENT);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cell = compile(
             &ast,
             CompileInput {
@@ -136,7 +144,9 @@ mod tests {
 
     #[test]
     fn argon_via() {
-        let ast = parse_workspace_with_std(ARGON_VIA).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_VIA);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cell = compile(
             &ast,
             CompileInput {
@@ -150,7 +160,9 @@ mod tests {
 
     #[test]
     fn argon_via_array() {
-        let ast = parse_workspace_with_std(ARGON_VIA_ARRAY).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_VIA_ARRAY);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cell = compile(
             &ast,
             CompileInput {
@@ -178,7 +190,9 @@ mod tests {
 
     #[test]
     fn argon_func_out_of_order() {
-        let ast = parse_workspace_with_std(ARGON_FUNC_OUT_OF_ORDER).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_FUNC_OUT_OF_ORDER);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cell = compile(
             &ast,
             CompileInput {
@@ -192,7 +206,9 @@ mod tests {
 
     #[test]
     fn argon_hierarchy() {
-        let ast = parse_workspace_with_std(ARGON_HIERARCHY).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_HIERARCHY);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -206,7 +222,9 @@ mod tests {
 
     #[test]
     fn argon_nested_inst() {
-        let ast = parse_workspace_with_std(ARGON_NESTED_INST).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_NESTED_INST);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -221,7 +239,9 @@ mod tests {
     #[test]
     #[ignore = "not supported"]
     fn argon_cell_out_of_order() {
-        let ast = parse_workspace_with_std(ARGON_CELL_OUT_OF_ORDER).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_CELL_OUT_OF_ORDER);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -235,7 +255,9 @@ mod tests {
 
     #[test]
     fn argon_fallback_basic() {
-        let ast = parse_workspace_with_std(ARGON_FALLBACK_BASIC).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_FALLBACK_BASIC);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -253,7 +275,9 @@ mod tests {
 
     #[test]
     fn argon_fallback_inst() {
-        let ast = parse_workspace_with_std(ARGON_FALLBACK_INST).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_FALLBACK_INST);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -271,7 +295,9 @@ mod tests {
 
     #[test]
     fn argon_bool_literal() {
-        let ast = parse_workspace_with_std(ARGON_BOOL_LITERAL).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_BOOL_LITERAL);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -303,7 +329,9 @@ mod tests {
 
     #[test]
     fn argon_dimensions() {
-        let ast = parse_workspace_with_std(ARGON_DIMENSIONS).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_DIMENSIONS);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -326,7 +354,9 @@ mod tests {
 
     #[test]
     fn argon_param_float() {
-        let ast = parse_workspace_with_std(ARGON_PARAM_FLOAT).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_PARAM_FLOAT);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -341,7 +371,9 @@ mod tests {
 
     #[test]
     fn argon_param_int() {
-        let ast = parse_workspace_with_std(ARGON_PARAM_INT).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_PARAM_INT);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -356,7 +388,9 @@ mod tests {
 
     #[test]
     fn argon_workspace() {
-        let ast = parse_workspace_with_std(ARGON_WORKSPACE).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_WORKSPACE);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -378,7 +412,9 @@ mod tests {
 
     #[test]
     fn argon_external_mods() {
-        let ast = parse_workspace_with_std(ARGON_EXTERNAL_MODS).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_EXTERNAL_MODS);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -400,7 +436,9 @@ mod tests {
 
     #[test]
     fn argon_sky130_inverter() {
-        let ast = parse_workspace_with_std(ARGON_SKY130_INVERTER).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_SKY130_INVERTER);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -459,7 +497,9 @@ mod tests {
 
     #[test]
     fn argon_enumerations() {
-        let ast = parse_workspace_with_std(ARGON_ENUMERATIONS).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_ENUMERATIONS);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -482,7 +522,9 @@ mod tests {
 
     #[test]
     fn argon_bbox() {
-        let ast = parse_workspace_with_std(ARGON_BBOX).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_BBOX);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -499,7 +541,9 @@ mod tests {
 
     #[test]
     fn argon_rounding() {
-        let ast = parse_workspace_with_std(ARGON_ROUNDING).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_ROUNDING);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -519,7 +563,9 @@ mod tests {
 
     #[test]
     fn argon_flipped_rect() {
-        let ast = parse_workspace_with_std(ARGON_FLIPPED_RECT).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_FLIPPED_RECT);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
@@ -543,7 +589,9 @@ mod tests {
 
     #[test]
     fn argon_seq_basic() {
-        let ast = parse_workspace_with_std(ARGON_SEQ_BASIC).unwrap_asts();
+        let o = parse_workspace_with_std(ARGON_SEQ_BASIC);
+        assert!(o.static_errors().is_empty());
+        let ast = o.ast();
         let cells = compile(
             &ast,
             CompileInput {
