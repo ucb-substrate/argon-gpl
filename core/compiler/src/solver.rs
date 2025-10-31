@@ -1,15 +1,17 @@
+use std::error;
+
 use approx::relative_eq;
 use faer::{
-    Faer, Mat,
-    sparse::{Csc, SparseColMat, linalg::qr},
+    Mat,
+    sparse::{SparseColMat, linalg::qr},
 };
 use indexmap::{IndexMap, IndexSet};
 use itertools::{Either, Itertools};
 use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
 
+//use crate::solver::IntoFaer;
 use faer_ext::IntoFaer;
-
 const EPSILON: f64 = 1e-10;
 const ROUND_STEP: f64 = 1e-3;
 const INV_ROUND_STEP: f64 = 1. / ROUND_STEP;
@@ -89,107 +91,20 @@ impl Solver {
         id
     }
 
-    ///use QR to find inconcistent constraints (like what is a linear combination of others)
-    /// kinda troll cuz u doing qr of AT
-    pub fn relationship_resigduals(&self, A: Mat<f64>, B: Mat<f64>) {
-        let AT = A.transpose();
-        let qr = AT.col_piv_qr();
-
-        let Q = qr.q();
-        let R = qr.r();
-        let P = qr.p().to_mat();
-
-        let tolerance = 1e-3;
-
-        let rank = R
-            .diagonal()
-            .as_slice()
-            .iter()
-            .filter(|&&val| val.abs() > tolerance)
-            .count();
-
-        if rank == A.nrows() {
-            //full-rank case
-            //return? idk
-        }
-
-        //get the constraints into the right order by multiplying by P transpose, since we found QR of A^T
-        let b_perm = P.transpose() * b;
-        let A_perm = P.transpose() * A;
-
-        //split up the A, b matrices into blocks depending on rank
-        let A_b = A_perm.rows(0..rank); //not really needed
-        let A_d = A_perm.rows(rank..A_perm.nrows()); //not really needed
-        let b_b = b_perm.rows(0..rank);
-        let b_d = b_perm.rows(rank..A_perm.nrows());
-
-        //split up R matrix into block
-        let R11 = R.block(0, 0, rank, rank);
-        let R12 = R.block(0, rank, rank, R.ncols() - rank);
-        let LT = R12.to_owned();
-
-        //find relationship between the A_b and A_d
-        solve_upper_triangular_in_place(R11, LT.as_mut(), Parallelism::None);
-
-        //see if relationship matches that of b_b and b_d
-        let perm_residuals = b_d - LT.transpose() * b_b;
-
-        //permute residuals to get back to og order
-        let residuals = P * perm_residuals;
-        return residuals;
-    }
-
-    ///Uses QR to solve least squares, and then checks residuals to get bad constraints
-    pub fn ls_residuals(&self, A: Mat<f64>, B: Mat<f64>) {
-        let m = A.nrows();
-        let n = A.ncols();
-
-        let qr = A.col_piv_qr();
-        let Q = qr.q();
-        let R = qr.r();
-        let P = qr.p().to_mat();
-
-        let rank = R
-            .diagonal()
-            .as_slice()
-            .iter()
-            .filter(|&&val| val.abs() > tolerance)
-            .count();
-
-        let c = Q.transpose() * B;
-        let c1 = c.rows(0..rank);
-        let R11 = R.block(0, 0, rank, rank);
-
-        let mut y1 = c1.to_owned();
-        solve_upper_triangular_in_place_with_conj(
-            R11.as_ref(),
-            y1.as_mut(),
-            Conj::No,
-            Parallelism::None,
-        );
-
-        let x = P * y1;
-        let residuals = (B - A * x).col(1);
-        let residuals_norm = residuals.norm_l2();
-
-        let mut badConstraints = false;
-
-        for r in 0..residuals.nrows() {
-            if residuals[(r, 0)].abs() > 1e-3 {
-                badConstraints = true;
-            }
-        }
-
-        return Vec![b - A * x, x];
-    }
-
-    /// Solves for as many variables as possible and substitutes their values into existing constraints.
-    /// Deletes constraints that no longer contain unsolved variables.
     pub fn solve(&mut self) {
+        use faer::linalg::triangular_solve::solve_upper_triangular_in_place_with_conj;
+        use faer::mat;
+        use faer::{Conj, Mat};
+        use faer_ext::IntoFaer;
+        use nalgebra::{DMatrix, DVector};
+        use nalgebra::{Dyn, Matrix, VecStorage};
+
+        let tolerance = 0.03;
         let n_vars = self.next_var as usize;
         if n_vars == 0 || self.constraints.is_empty() {
             return;
         }
+
         let a = DMatrix::from_row_iterator(
             self.constraints.len(),
             n_vars,
@@ -201,50 +116,109 @@ impl Solver {
             self.constraints.len(),
             self.constraints.iter().map(|c| -c.expr.constant),
         );
+        let a_constraint_ids = Vec::from_iter(self.constraints.iter().map(|c| c.id));
 
-        let A: Mat<f64> = a.to_faer();
-        let B: Mat<f64> = b.to_faer();
+        let A = Mat::from_fn(a.nrows(), a.ncols(), |i, j| a[(i, j)]);
+        let B = Mat::from_fn(b.nrows(), b.ncols(), |i, j| b[(i, j)]);
 
-        //
-        let residual_rqr = self.relationship_residuals(A, B);
-        let mut bad_constraints: Vec<u32> = Vec::new();
+        let m = A.nrows();
+        let n = A.ncols();
 
-        //if any nonzero residuals, then those are inconsistent (what are constraint id's)
-        for r in 0..residual.nrows() {
-            if residual[(r, 0)] > tolerance {
-                bad_constraints.push(r);
+        use faer::linalg::solvers::ColPivQr;
+        //use faer::sparse::linalg::solvers::Qr;
+
+        let qr = ColPivQr::new(A.as_ref());
+        let R = qr.R();
+        let P = qr.P();
+
+        let rank_A = R
+            .diagonal()
+            .column_vector()
+            .iter()
+            .filter(|&&val| val.abs() > tolerance)
+            .count();
+
+        use faer::prelude::SolveLstsq;
+
+        let x = if m >= n {
+            qr.solve_lstsq(&B)
+        } else {
+            let At = A.transpose();
+            let AAt = &A * &At;
+            let qr_normal = ColPivQr::new(AAt.as_ref());
+            let y = qr_normal.solve_lstsq(B.as_ref());
+            At * y
+        };
+
+        let residual = &B - &A * &x;
+
+        let tolerance = 1e-10;
+
+        for i in 0..residual.nrows() {
+            let r = residual[(i, 0)];
+            if r.abs() > tolerance {
+                self.inconsistent_constraints.insert(a_constraint_ids[i]);
             }
         }
+        let (forward, __) = P.arrays();
 
-        let svd = a.clone().svd(true, true);
-        let vt = svd.v_t.as_ref().expect("No V^T matrix");
-        let r = svd.rank(EPSILON);
-        if r == 0 {
-            return;
-        }
-        let vt_recons = vt.rows(0, r);
-        let sol = svd.solve(&b, EPSILON).unwrap();
+        let determ_var_idx: Vec<usize> = forward[0..rank_A].to_vec();
+        let free_var_idx: Vec<usize> = forward[rank_A..n].to_vec();
 
-        for i in 0..self.next_var {
-            let recons = (vt_recons.transpose() * vt_recons.column(i as usize))[((i as usize), 0)];
-            if !self.solved_vars.contains_key(&Var(i))
-                && relative_eq!(recons, 1., epsilon = EPSILON)
-            {
-                let val = round(sol[(i as usize, 0)]);
-                self.solved_vars.insert(Var(i), val);
-            }
+        for (i, &r) in determ_var_idx.iter().enumerate() {
+            let actual_val = x[(r, 0)];
+            self.solved_vars.insert(Var(r as u64), actual_val);
         }
-        for constraint in self.constraints.iter_mut() {
-            substitute_expr(&self.solved_vars, &mut constraint.expr);
-            if constraint.expr.coeffs.is_empty()
-                && approx::relative_ne!(constraint.expr.constant, 0., epsilon = EPSILON)
-            {
-                self.inconsistent_constraints.insert(constraint.id);
-            }
-        }
-        self.constraints
-            .retain(|constraint| !constraint.expr.coeffs.is_empty());
     }
+
+    /// Solves for as many variables as possible and substitutes their values into existing constraints.
+    /// Deletes constraints that no longer contain unsolved variables.
+    // pub fn solve(&mut self) {
+    //     let n_vars = self.next_var as usize;
+    //     if n_vars == 0 || self.constraints.is_empty() {
+    //         return;
+    //     }
+    //     let a = DMatrix::from_row_iterator(
+    //         self.constraints.len(),
+    //         n_vars,
+    //         self.constraints
+    //             .iter()
+    //             .flat_map(|c| c.expr.coeff_vec(n_vars)),
+    //     );
+    //     let b = DVector::from_iterator(
+    //         self.constraints.len(),
+    //         self.constraints.iter().map(|c| -c.expr.constant),
+    //     );
+
+    //     let svd = a.clone().svd(true, true);
+    //     let vt = svd.v_t.as_ref().expect("No V^T matrix");
+    //     let r = svd.rank(EPSILON);
+    //     if r == 0 {
+    //         return;
+    //     }
+    //     let vt_recons = vt.rows(0, r);
+    //     let sol = svd.solve(&b, EPSILON).unwrap();
+
+    //     for i in 0..self.next_var {
+    //         let recons = (vt_recons.transpose() * vt_recons.column(i as usize))[((i as usize), 0)];
+    //         if !self.solved_vars.contains_key(&Var(i))
+    //             && relative_eq!(recons, 1., epsilon = EPSILON)
+    //         {
+    //             let val = round(sol[(i as usize, 0)]);
+    //             self.solved_vars.insert(Var(i), val);
+    //         }
+    //     }
+    //     for constraint in self.constraints.iter_mut() {
+    //         substitute_expr(&self.solved_vars, &mut constraint.expr);
+    //         if constraint.expr.coeffs.is_empty()
+    //             && approx::relative_ne!(constraint.expr.constant, 0., epsilon = EPSILON)
+    //         {
+    //             self.inconsistent_constraints.insert(constraint.id);
+    //         }
+    //     }
+    //     self.constraints
+    //         .retain(|constraint| !constraint.expr.coeffs.is_empty());
+    // }
 
     pub fn value_of(&self, var: Var) -> Option<f64> {
         self.solved_vars.get(&var).copied()
@@ -409,8 +383,52 @@ mod tests {
             constant: 0.,
         });
         solver.solve();
-        assert_relative_eq!(*solver.solved_vars.get(&x).unwrap(), 5., epsilon = EPSILON);
+        assert_relative_eq!(*solver.solved_vars.get(&y).unwrap(), 5., epsilon = EPSILON);
         assert_relative_eq!(*solver.solved_vars.get(&y).unwrap(), 5., epsilon = EPSILON);
         assert!(!solver.solved_vars.contains_key(&z));
     }
 }
+
+/*///Uses QR to solve least squares, and then checks residuals to get bad constraints
+pub fn ls_residuals(&self, A: Mat<f64>, B: Mat<f64>) {
+    let m = A.nrows();
+    let n = A.ncols();
+
+    let qr = A.col_piv_qr();
+    let Q = qr.q();
+    let R = qr.r();
+    let P = qr.p().to_mat();
+
+    let rank = R
+        .diagonal()
+        .as_slice()
+        .iter()
+        .filter(|&&val| val.abs() > tolerance)
+        .count();
+
+    let c = Q.transpose() * B;
+    let c1 = c.rows(0..rank);
+    let R11 = R.block(0, 0, rank, rank);
+
+    let mut y1 = c1.to_owned();
+    solve_upper_triangular_in_place_with_conj(
+        R11.as_ref(),
+        y1.as_mut(),
+        Conj::No,
+        Parallelism::None,
+    );
+
+    let x = P * y1;
+    let residuals = (B - A * x).col(1);
+    let residuals_norm = residuals.norm_l2();
+
+    let mut badConstraints = false;
+
+    for r in 0..residuals.nrows() {
+        if residuals[(r, 0)].abs() > 1e-3 {
+            badConstraints = true;
+        }
+    }
+
+    return Vec![b - A * x, x];
+} */
