@@ -3,7 +3,10 @@ use std::error;
 use approx::relative_eq;
 use faer::{
     Mat,
-    sparse::{SparseColMat, linalg::qr},
+    sparse::{
+        self, SparseColMat,
+        linalg::qr::{self, QrSymbolicParams},
+    },
 };
 use indexmap::{IndexMap, IndexSet};
 use itertools::{Either, Itertools};
@@ -92,12 +95,21 @@ impl Solver {
     }
 
     pub fn solve(&mut self) {
+        let method: u64 = 1;
+        if method == 0 {
+            self.solve_svd();
+        } else if method == 1 {
+            self.solve_qr();
+        }
+    }
+    pub fn solve_qr(&mut self) {
         use faer::linalg::triangular_solve::solve_upper_triangular_in_place_with_conj;
         use faer::mat;
         use faer::{Conj, Mat};
         use faer_ext::IntoFaer;
         use nalgebra::{DMatrix, DVector};
         use nalgebra::{Dyn, Matrix, VecStorage};
+        use rayon::prelude::*;
 
         let tolerance = 0.03;
         let n_vars = self.next_var as usize;
@@ -105,18 +117,24 @@ impl Solver {
             return;
         }
 
-        let a = DMatrix::from_row_iterator(
-            self.constraints.len(),
-            n_vars,
-            self.constraints
-                .iter()
-                .flat_map(|c| c.expr.coeff_vec(n_vars)),
-        );
-        let b = DVector::from_iterator(
-            self.constraints.len(),
-            self.constraints.iter().map(|c| -c.expr.constant),
-        );
-        let a_constraint_ids = Vec::from_iter(self.constraints.iter().map(|c| c.id));
+        let temp_a: Vec<f64> = self
+            .constraints
+            .par_iter()
+            .flat_map(|c| c.expr.coeff_vec(n_vars))
+            .collect();
+
+        let a: DMatrix<f64> = DMatrix::from_row_iterator(self.constraints.len(), n_vars, temp_a);
+
+        let temp_b: Vec<f64> = self
+            .constraints
+            .par_iter()
+            .map(|c| -c.expr.constant)
+            .collect();
+
+        let b = DVector::from_iterator(self.constraints.len(), temp_b);
+
+        let temp_a_constraind_ids: Vec<u64> = self.constraints.par_iter().map(|c| c.id).collect();
+        let a_constraint_ids = Vec::from_iter(temp_a_constraind_ids);
 
         let A = Mat::from_fn(a.nrows(), a.ncols(), |i, j| a[(i, j)]);
         let B = Mat::from_fn(b.nrows(), b.ncols(), |i, j| b[(i, j)]);
@@ -127,14 +145,15 @@ impl Solver {
         use faer::linalg::solvers::ColPivQr;
         //use faer::sparse::linalg::solvers::Qr;
 
-        let qr = ColPivQr::new(A.as_ref());
+        let qr: ColPivQr<f64> = ColPivQr::new(A.as_ref());
         let R = qr.R();
         let P = qr.P();
+        let Q = qr.compute_Q();
 
         let rank_A = R
             .diagonal()
             .column_vector()
-            .iter()
+            .par_iter()
             .filter(|&&val| val.abs() > tolerance)
             .count();
 
@@ -173,52 +192,52 @@ impl Solver {
 
     /// Solves for as many variables as possible and substitutes their values into existing constraints.
     /// Deletes constraints that no longer contain unsolved variables.
-    // pub fn solve(&mut self) {
-    //     let n_vars = self.next_var as usize;
-    //     if n_vars == 0 || self.constraints.is_empty() {
-    //         return;
-    //     }
-    //     let a = DMatrix::from_row_iterator(
-    //         self.constraints.len(),
-    //         n_vars,
-    //         self.constraints
-    //             .iter()
-    //             .flat_map(|c| c.expr.coeff_vec(n_vars)),
-    //     );
-    //     let b = DVector::from_iterator(
-    //         self.constraints.len(),
-    //         self.constraints.iter().map(|c| -c.expr.constant),
-    //     );
+    pub fn solve_svd(&mut self) {
+        let n_vars = self.next_var as usize;
+        if n_vars == 0 || self.constraints.is_empty() {
+            return;
+        }
+        let a = DMatrix::from_row_iterator(
+            self.constraints.len(),
+            n_vars,
+            self.constraints
+                .iter()
+                .flat_map(|c| c.expr.coeff_vec(n_vars)),
+        );
+        let b = DVector::from_iterator(
+            self.constraints.len(),
+            self.constraints.iter().map(|c| -c.expr.constant),
+        );
 
-    //     let svd = a.clone().svd(true, true);
-    //     let vt = svd.v_t.as_ref().expect("No V^T matrix");
-    //     let r = svd.rank(EPSILON);
-    //     if r == 0 {
-    //         return;
-    //     }
-    //     let vt_recons = vt.rows(0, r);
-    //     let sol = svd.solve(&b, EPSILON).unwrap();
+        let svd = a.clone().svd(true, true);
+        let vt = svd.v_t.as_ref().expect("No V^T matrix");
+        let r = svd.rank(EPSILON);
+        if r == 0 {
+            return;
+        }
+        let vt_recons = vt.rows(0, r);
+        let sol = svd.solve(&b, EPSILON).unwrap();
 
-    //     for i in 0..self.next_var {
-    //         let recons = (vt_recons.transpose() * vt_recons.column(i as usize))[((i as usize), 0)];
-    //         if !self.solved_vars.contains_key(&Var(i))
-    //             && relative_eq!(recons, 1., epsilon = EPSILON)
-    //         {
-    //             let val = round(sol[(i as usize, 0)]);
-    //             self.solved_vars.insert(Var(i), val);
-    //         }
-    //     }
-    //     for constraint in self.constraints.iter_mut() {
-    //         substitute_expr(&self.solved_vars, &mut constraint.expr);
-    //         if constraint.expr.coeffs.is_empty()
-    //             && approx::relative_ne!(constraint.expr.constant, 0., epsilon = EPSILON)
-    //         {
-    //             self.inconsistent_constraints.insert(constraint.id);
-    //         }
-    //     }
-    //     self.constraints
-    //         .retain(|constraint| !constraint.expr.coeffs.is_empty());
-    // }
+        for i in 0..self.next_var {
+            let recons = (vt_recons.transpose() * vt_recons.column(i as usize))[((i as usize), 0)];
+            if !self.solved_vars.contains_key(&Var(i))
+                && relative_eq!(recons, 1., epsilon = EPSILON)
+            {
+                let val = round(sol[(i as usize, 0)]);
+                self.solved_vars.insert(Var(i), val);
+            }
+        }
+        for constraint in self.constraints.iter_mut() {
+            substitute_expr(&self.solved_vars, &mut constraint.expr);
+            if constraint.expr.coeffs.is_empty()
+                && approx::relative_ne!(constraint.expr.constant, 0., epsilon = EPSILON)
+            {
+                self.inconsistent_constraints.insert(constraint.id);
+            }
+        }
+        self.constraints
+            .retain(|constraint| !constraint.expr.coeffs.is_empty());
+    }
 
     pub fn value_of(&self, var: Var) -> Option<f64> {
         self.solved_vars.get(&var).copied()
@@ -432,3 +451,55 @@ pub fn ls_residuals(&self, A: Mat<f64>, B: Mat<f64>) {
 
     return Vec![b - A * x, x];
 } */
+
+// pub fn solve_sparse(&mut self) {
+//     use faer::linalg::triangular_solve::solve_upper_triangular_in_place_with_conj;
+//     use faer::mat;
+//     use faer::{Conj, Mat};
+//     use faer_ext::IntoFaer;
+//     use nalgebra::{DMatrix, DVector};
+//     use nalgebra::{Dyn, Matrix, VecStorage};
+//     use rayon::prelude::*;
+
+//     let tolerance = 0.03;
+//     let n_vars = self.next_var as usize;
+//     if n_vars == 0 || self.constraints.is_empty() {
+//         return;
+//     }
+
+//     let a: DMatrix<f64> = DMatrix::from_row_iterator(
+//         self.constraints.len(),
+//         n_vars,
+//         self.constraints
+//             .iter()
+//             .flat_map(|c| c.expr.coeff_vec(n_vars)),
+//     );
+
+//     let b = DVector::from_iterator(
+//         self.constraints.len(),
+//         self.constraints.iter().map(|c| -c.expr.constant),
+//     );
+
+//     let temp_a_constraind_ids: Vec<u64> = self.constraints.par_iter().map(|c| c.id).collect();
+//     let a_constraint_ids = Vec::from_iter(temp_a_constraind_ids);
+
+//     let m = a.nrows();
+//     let n = b.ncols();
+
+//     use faer::sparse::linalg::solvers::Qr;
+//     let mut triplets = Vec::new();
+
+//     for j in 0..n {
+//         for i in 0..m {
+//             let coef = a[(i, j)];
+//             if coef.abs() < tolerance {
+//                 triplets.push(faer::sparse::Triplet::new(i, j, coef));
+//             }
+//         }
+//     }
+//     let sparse_A = faer::sparse::SparseColMat::try_new_from_triplets(m, n, &triplets).unwrap();
+//     let symbolic = sparse::linalg::solvers::SymbolicQr::try_new(sparse_A.symbolic()).unwrap();
+
+//     let qr = Qr::try_new_with_symbolic(symbolic, sparse_A.as_ref()).unwrap();
+//     let r = qr.
+// }

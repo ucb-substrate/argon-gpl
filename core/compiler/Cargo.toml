@@ -7,8 +7,10 @@ edition = "2024"
 derive-where = { version = "1", features = ["serde"] }
 nalgebra = "0.34"
 klayout-lyp = "0.1.1"
-faer = "0.23.2"
+faer = {version = "0.23.2", features = ["rayon"]}
+rayon = "1.10"
 faer-ext = { version = "0.7.1", features = ["nalgebra"] }
+blas-src = { version = "0.10", features = ["openblas"] }
 faer-core = "0.17.1"
 faer-sparse = "0.17"
 
