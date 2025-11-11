@@ -125,8 +125,6 @@ impl Solver {
             return;
         }
         
-
-        // TODO: Consider not using parallel processing for the inner loop. Not enough vars to beat overhead.
         let triplets: Vec<(usize, usize, f64)> = self
             .constraints
             .par_iter()
@@ -134,7 +132,7 @@ impl Solver {
             .flat_map(|(c_index, c)| {
                 c.expr
                     .coeff_vec(n_vars)
-                    .into_par_iter()
+                    .into_iter()
                     .enumerate()
                     .filter_map(move |(v_index, v)| {
                         if v != 0.0 {
@@ -149,10 +147,9 @@ impl Solver {
         let m = self.constraints.iter().count();
         let n = n_vars;
         
-        // TODO: Consider not using parallel processing here. Not enough vars to beat overhead.
         let temp_b: Vec<f64> = self
             .constraints
-            .par_iter()
+            .iter()
             .map(|c| -c.expr.constant)
             .collect();
 
@@ -195,16 +192,10 @@ impl Solver {
         let determ_var_idx: Vec<usize> = forward[0..rank].to_vec();
         // let _free_var_idx: Vec<usize> = forward[rank..n].to_vec();
         
-        // TODO: Consider not using parallel processing here. Not enough vars to beat overhead.
-        let par_solved_vars: HashMap<Var, f64> = determ_var_idx
-            .par_iter()
-            .map(|&r| {
-                let actual_val = x[(r, 0)];
-                (Var(r as u64), actual_val)
-            })
-            .collect();
-
-        self.solved_vars.extend(par_solved_vars);
+        for &r in determ_var_idx.iter() {
+            let actual_val = x[(r, 0)];
+            self.solved_vars.insert(Var(r as u64), actual_val);
+        }
         
         for constraint in self.constraints.iter_mut() {
             substitute_expr(&self.solved_vars, &mut constraint.expr);
@@ -259,17 +250,16 @@ impl Solver {
 
         let a: DMatrix<f64> = DMatrix::from_row_iterator(self.constraints.len(), n_vars, temp_a);
         
-        // TODO: Consider not using parallel processing here. Not enough vars to beat overhead.
         let temp_b: Vec<f64> = self
             .constraints
-            .par_iter()
+            .iter()
             .map(|c| -c.expr.constant)
             .collect();
 
         let b = DVector::from_iterator(self.constraints.len(), temp_b);
         
         // TODO: Consider not using parallel processing here. Not enough vars to beat overhead.
-        let a_constraint_ids:Vec<u64> = self.constraints.par_iter().map(|c| c.id).collect();
+        let a_constraint_ids: Vec<u64> = self.constraints.par_iter().map(|c| c.id).collect();
 
         let A = Mat::from_fn(a.nrows(), a.ncols(), |i, j| a[(i, j)]);
         let B = Mat::from_fn(b.nrows(), b.ncols(), |i, j| b[(i, j)]);
@@ -288,11 +278,10 @@ impl Solver {
         let P = qr.P();
         let _Q = qr.compute_Q();
         
-        // TODO: Consider not using parallel processing here. Not enough vars to beat overhead.
         let rank_A = R
             .diagonal()
             .column_vector()
-            .par_iter()
+            .iter()
             .filter(|&&val| val.abs() > tolerance)
             .count();
 
