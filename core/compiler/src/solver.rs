@@ -129,19 +129,13 @@ impl Solver {
             .constraints
             .par_iter()
             .enumerate()
-            .flat_map(|(c_index, c)| {
-                c.expr
-                    .coeff_vec(n_vars)
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(move |(v_index, v)| {
-                        if v != 0.0 {
-                            Some((c_index, v_index, v))
-                        } else {
-                            None
-                        }
-                    })
+            .map(|(c_index, c)| {
+                c.expr.coeffs.iter().map(move |(coeff, var)| {
+                    (c_index, var.0 as usize, *coeff)
+                })
+                .collect::<Vec<_>>()
             })
+            .flatten()
             .collect();
 
         let m = self.constraints.iter().count();
