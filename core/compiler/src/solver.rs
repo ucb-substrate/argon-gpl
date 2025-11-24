@@ -125,7 +125,7 @@ impl Solver {
             return;
         }
 
-        let triplets: Vec<(usize, usize, f64)> = self
+        let old_triplets: Vec<(usize, usize, f64)> = self
             .constraints
             .par_iter()
             .enumerate()
@@ -144,8 +144,33 @@ impl Solver {
             })
             .collect();
 
-        let m = self.constraints.iter().count();
-        let n = n_vars;
+        let mut used = vec![false; n_vars];
+        for (_, v_index, _) in &old_triplets {
+            used[*v_index] = true;
+        }
+
+        let mut var_map = vec![usize::MAX; n_vars]; //og matrix -> shrunk matrix
+        let mut rev_var_map = Vec::with_capacity(n_vars); //shrunk matrix -> og matrix
+        let mut new_index = 0;
+
+        for (old_index, &is_used) in used.iter().enumerate() {
+            if is_used {
+                var_map[old_index] = new_index;
+                rev_var_map.push(old_index);
+                new_index += 1;
+            }
+        }
+
+        let n = new_index;
+        let m = self.constraints.len();
+
+        let triplets: Vec<(usize, usize, f64)> = old_triplets
+            .into_par_iter()
+            .map(|(c_index, v_index, val)| {
+                let new_index = var_map[v_index];
+                (c_index, new_index, val)
+            })
+            .collect();
 
         let temp_b: Vec<f64> = self
             .constraints
@@ -182,9 +207,7 @@ impl Solver {
             }
         }
 
-        ///TODO: stop returning dense nullspace, get in sparse form
         let ones_vector: DVector<f64> = DVector::from_element(n - rank, 1.0);
-        //let null_space_components = qr.get_nullspace().unwrap().abs() * ones_vector;
         let null_space_components = qr.get_nspace_sparse().unwrap() * ones_vector;
 
         let par_solved_vars: HashMap<Var, f64> = (0..n)
@@ -192,7 +215,8 @@ impl Solver {
             .filter(|&i| null_space_components[i] < tolerance)
             .map(|i| {
                 let actual_val = x[(i, 0)];
-                (Var(i as u64), actual_val)
+                let actual_var = rev_var_map[i];
+                (Var(actual_var as u64), actual_val)
             })
             .collect();
 
