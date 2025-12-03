@@ -343,6 +343,13 @@ impl<'a> AstTransformer for ImportPass<'a> {
     ) -> <Self::OutputMetadata as AstMetadata>::ArgDecl {
     }
 
+    fn dispatch_generic_decl(
+        &mut self,
+        _input: &crate::ast::GenericDecl<Self::InputS, Self::InputMetadata>,
+        _name: &Ident<Self::OutputS, Self::OutputMetadata>,
+    ) -> <Self::OutputMetadata as AstMetadata>::GenericDecl {
+    }
+
     fn dispatch_scope(
         &mut self,
         _input: &Scope<Self::InputS, Self::InputMetadata>,
@@ -570,6 +577,7 @@ impl AstMetadata for VarIdTyMetadata {
     type Args = ();
     type KwArgValue = Ty;
     type ArgDecl = (VarId, Ty);
+    type GenericDecl = ();
     type Scope = Ty;
     type Typ = ();
     type CastExpr = Ty;
@@ -1028,6 +1036,11 @@ impl<'a> AstTransformer for VarIdTyPass<'a> {
             .scope_annotation
             .as_ref()
             .map(|ident| self.transform_ident(ident));
+        let generics = input
+            .generics
+            .iter()
+            .map(|decl| self.transform_generic_decl(decl))
+            .collect_vec();
         let args: Vec<_> = input
             .args
             .iter()
@@ -1056,6 +1069,7 @@ impl<'a> AstTransformer for VarIdTyPass<'a> {
         let metadata = self.dispatch_fn_decl(input, &name, &args, &return_ty, &scope);
         FnDecl {
             name,
+            generics,
             args,
             return_ty,
             scope,
@@ -1673,6 +1687,13 @@ impl<'a> AstTransformer for VarIdTyPass<'a> {
     ) -> <Self::OutputMetadata as AstMetadata>::ArgDecl {
         let ty = self.ty_from_spec(&input.ty);
         (self.alloc(&input.name.name, ty.clone()), ty)
+    }
+
+    fn dispatch_generic_decl(
+        &mut self,
+        _input: &crate::ast::GenericDecl<Self::InputS, Self::InputMetadata>,
+        _name: &Ident<Self::OutputS, Self::OutputMetadata>,
+    ) -> <Self::OutputMetadata as AstMetadata>::GenericDecl {
     }
 
     fn dispatch_scope(
