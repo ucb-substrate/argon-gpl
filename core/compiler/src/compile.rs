@@ -2254,26 +2254,23 @@ impl<'a> ExecPass<'a> {
             }
         }
 
-        let inconsistent_errors = {
-            let state = self.cell_state_mut(cell_id);
-            if progress {
-                state.solve_iters += 1;
-                state.solver.solve();
-            }
-
-            state
-                .solver
-                .inconsistent_constraints()
-                .clone()
-                .into_iter()
-                .map(|constraint| ExecError {
-                    span: state.constraint_span_map.get(&constraint).cloned(),
-                    cell: cell_id,
-                    kind: ExecErrorKind::InconsistentConstraint(constraint),
-                })
-                .collect::<Vec<_>>()
-        };
-        self.errors.extend(inconsistent_errors);
+        let state = self.cell_state_mut(cell_id);
+        if progress {
+            state.solve_iters += 1;
+            state.solver.solve();
+        }
+        for constraint in state.solver.inconsistent_constraints().clone() {
+            let span = self
+                .cell_state(cell_id)
+                .constraint_span_map
+                .get(&constraint)
+                .cloned();
+            self.errors.push(ExecError {
+                span,
+                cell: cell_id,
+                kind: ExecErrorKind::InconsistentConstraint(constraint),
+            });
+        }
 
         self.partial_cells
             .pop_back()
