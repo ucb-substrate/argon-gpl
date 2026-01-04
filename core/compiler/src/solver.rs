@@ -468,4 +468,67 @@ mod tests {
     }
 
     //big matrix
+    #[test]
+    fn big_num_stab_test() {
+        //make a graph laplacian for grid, want to see if QR = A?
+        fn generate_bad_value() -> f64 {
+            use rand::Rng;
+            use rand::seq::SliceRandom;
+            use rand::thread_rng;
+            let mut rng = thread_rng();
+            let exponents = [-8.0, 0.0, 8.0];
+            let exp = exponents.choose(&mut rng).unwrap();
+            let magnitude = 10.0_f64.powf(*exp);
+            let sign = if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+            let noise = rng.gen_range(0.5..1.5);
+            magnitude * sign * noise
+        }
+        let size = 25;
+        //let mut a_coo: CooMatrix<f64> = CooMatrix::new(size * size, size * size);
+        use nalgebra::DMatrix;
+        let mut a_dense = DMatrix::zeros(size * size, size * size);
+        let mut triplets: Vec<(usize, usize, f64)> = Vec::new();
+
+        for i in 0..(size) {
+            for j in 0..(size) {
+                let curr_node = i * size + j;
+                let mut bad_val = generate_bad_value();
+                a_dense[(curr_node, curr_node)] = bad_val;
+                triplets.push((curr_node, curr_node, bad_val));
+                if (j + 1) < size {
+                    bad_val = generate_bad_value();
+                    a_dense[(curr_node, curr_node + 1)] = bad_val;
+                    triplets.push((curr_node, curr_node + 1, bad_val));
+                    bad_val = generate_bad_value();
+                    a_dense[(curr_node + 1, curr_node)] = bad_val;
+                    triplets.push((curr_node + 1, curr_node, bad_val));
+                }
+                if (i + 1) < size {
+                    let next_row_node = size * (i + 1) + j;
+                    bad_val = generate_bad_value();
+                    a_dense[(curr_node, next_row_node)] = bad_val;
+                    triplets.push((curr_node, next_row_node, bad_val));
+                    bad_val = generate_bad_value();
+                    a_dense[(next_row_node, curr_node)] = bad_val;
+                    triplets.push((next_row_node, curr_node, bad_val));
+                }
+            }
+        }
+        let qr = SpqrFactorization::from_triplets(&triplets, size * size, size * size).unwrap();
+        let q = qr.qa_matrix().unwrap();
+        let r = qr.ra_matrix().unwrap();
+
+        let p_indices = qr.permutation_a().unwrap();
+
+        let mut ap_dense = DMatrix::zeros(size * size, size * size);
+        for (new_col_idx, &old_col_idx) in p_indices.iter().enumerate() {
+            let col = a_dense.column(old_col_idx);
+            ap_dense.set_column(new_col_idx, &col);
+        }
+        let a_norm = ap_dense.norm();
+        let resid = ap_dense - q * r;
+        let err = resid.norm();
+        let relative_err = err / a_norm;
+        assert!(relative_err < 1e-12, "not num stab");
+    }
 }

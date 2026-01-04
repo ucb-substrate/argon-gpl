@@ -1055,6 +1055,7 @@ dependencies = [
  "lrpar",
  "nalgebra",
  "nalgebra-sparse",
+ "rand 0.8.5",
  "rayon",
  "regex",
  "rgb",
