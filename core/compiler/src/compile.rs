@@ -18,7 +18,7 @@ use thiserror::Error;
 use crate::ast::annotated::AnnotatedAst;
 use crate::ast::{
     BinOp, ComparisonOp, ConstantDecl, EnumDecl, FieldAccessExpr, FnDecl, IdentPath, KwArgValue,
-    MatchExpr, ModPath, Scope, Span, TySpec, TySpecKind, UnaryOp, WorkspaceAst,
+    MatchExpr, ModPath, Scope, Span, TySpec, TySpecKind, UnaryOp, UnaryOpExpr, WorkspaceAst,
 };
 use crate::layer::LayerProperties;
 use crate::parse::WorkspaceParseAst;
@@ -477,6 +477,10 @@ pub enum Ty {
     /// Suppresses type checking of dependent properties.
     #[default]
     Unknown,
+    /// Catch-all any type.
+    ///
+    /// Should eventually be removed.
+    Any,
     Bool,
     Float,
     Int,
@@ -498,6 +502,7 @@ impl Ty {
         match name {
             "Float" => Some(Ty::Float),
             "Rect" => Some(Ty::Rect),
+            "Any" => Some(Ty::Any),
             "Int" => Some(Ty::Int),
             "String" => Some(Ty::String),
             "()" => Some(Ty::Nil),
@@ -728,7 +733,7 @@ impl<'a> VarIdTyPass<'a> {
     }
 
     fn assert_eq_ty(&mut self, span: cfgrammar::Span, found: &Ty, expected: &Ty) {
-        if *found != *expected {
+        if *found != *expected && !(*found == Ty::Any || *expected == Ty::Any) {
             self.errors.push(StaticError {
                 span: self.span(span),
                 kind: StaticErrorKind::IncorrectTy {
@@ -740,7 +745,7 @@ impl<'a> VarIdTyPass<'a> {
     }
 
     fn assert_ty_is_cell(&mut self, span: cfgrammar::Span, ty: &Ty) {
-        if !matches!(ty, Ty::Cell(_)) {
+        if !matches!(ty, Ty::Cell(_) | Ty::Any) {
             self.errors.push(StaticError {
                 span: self.span(span),
                 kind: StaticErrorKind::IncorrectTyCategory {
@@ -752,7 +757,7 @@ impl<'a> VarIdTyPass<'a> {
     }
 
     fn assert_ty_is_enum(&mut self, span: cfgrammar::Span, ty: &Ty) {
-        if !matches!(ty, Ty::Enum(_)) {
+        if !matches!(ty, Ty::Enum(_) | Ty::Any) {
             self.errors.push(StaticError {
                 span: self.span(span),
                 kind: StaticErrorKind::IncorrectTyCategory {
@@ -1397,7 +1402,8 @@ impl<'a> AstTransformer for VarIdTyPass<'a> {
                     .cloned()
                     .unwrap_or_else(|| self.no_field_on_ty(field, base_ty.clone())),
             },
-            // Propagate unknown types without throwing an error.
+            // Propagate any and unknown types without throwing an error.
+            Ty::Any => Ty::Any,
             Ty::Unknown => Ty::Unknown,
             _ => self.no_field_on_ty(field, base_ty.clone()),
         }
@@ -2044,7 +2050,15 @@ impl<'a> ExecPass<'a> {
             ) if name == input.cell.last().unwrap() => Some(v.metadata.clone()),
             _ => None,
         }) {
-            let cell_id = self.execute_cell(vid, input.args, Some("TOP"));
+            let cell_id = match self.execute_cell(vid, input.args, Some("TOP")) {
+                Ok(cell_id) => cell_id,
+                Err(()) => {
+                    return CompileOutput::ExecErrors(ExecErrorCompileOutput {
+                        errors: self.errors,
+                        output: None,
+                    });
+                }
+            };
             let layers = if let Ok(layers) = std::fs::File::open(input.lyp_file)
                 .map_err(|_| ())
                 .and_then(|f| klayout_lyp::from_reader(BufReader::new(f)).map_err(|_| ()))
@@ -2094,7 +2108,7 @@ impl<'a> ExecPass<'a> {
         cell: VarId,
         args: Vec<CellArg>,
         scope_annotation: Option<&str>,
-    ) -> CellId {
+    ) -> Result<CellId, ()> {
         let mut frame = Frame {
             bindings: Default::default(),
             parent: Some(self.global_frame),
@@ -2151,7 +2165,7 @@ impl<'a> ExecPass<'a> {
                 cell: cell_id,
                 kind: ExecErrorKind::InvalidCell,
             });
-            return cell_id;
+            return Ok(cell_id);
         }
         for (val, decl) in args.into_iter().zip(cell_decl.args.iter()) {
             let vid = self.value_id();
@@ -2206,7 +2220,7 @@ impl<'a> ExecPass<'a> {
             let deferred = self.cell_state(cell_id).deferred.clone();
             progress = false;
             for vid in deferred {
-                progress = progress || self.eval_partial(vid);
+                progress = progress || self.eval_partial(vid)?;
             }
 
             if require_progress && !progress {
@@ -2276,7 +2290,7 @@ impl<'a> ExecPass<'a> {
 
         let cell = self.emit(cell_id);
         assert!(self.compiled_cells.insert(cell_id, cell).is_none());
-        cell_id
+        Ok(cell_id)
     }
 
     fn emit(&mut self, cell: CellId) -> CompiledCell {
@@ -2777,7 +2791,11 @@ impl<'a> ExecPass<'a> {
             }
             Expr::UnaryOp(u) => {
                 let operand = self.visit_expr(loc, &u.operand);
-                PartialEvalState::UnaryOp(PartialUnaryOp { operand, op: u.op })
+                PartialEvalState::UnaryOp(PartialUnaryOp {
+                    operand,
+                    op: u.op,
+                    expr: u.clone(),
+                })
             }
             Expr::Cast(cast) => {
                 let value = self.visit_expr(loc, &cast.value);
@@ -2799,16 +2817,16 @@ impl<'a> ExecPass<'a> {
         vid
     }
 
-    fn eval_partial(&mut self, vid: ValueId) -> bool {
+    fn eval_partial(&mut self, vid: ValueId) -> Result<bool, ()> {
         let v = self.values.swap_remove(&vid);
         if v.is_none() {
-            return false;
+            return Ok(false);
         }
         let mut v = v.unwrap();
         let vref = v.as_mut();
         if vref.is_ready() {
             self.values.insert(vid, v);
-            return false;
+            return Ok(false);
         }
         let vref = vref.unwrap_deferred();
         let state = self.cell_states.get_mut(&vref.loc.cell).unwrap();
@@ -2984,7 +3002,14 @@ impl<'a> ExecPass<'a> {
                                 }
                             }
                             Value::Cell(c) => Some(self.bbox(*c)),
-                            _ => unreachable!(),
+                            _ => {
+                                self.errors.push(ExecError {
+                                    span: Some(span.clone()),
+                                    cell: vref.loc.cell,
+                                    kind: ExecErrorKind::InvalidType,
+                                });
+                                return Err(());
+                            }
                         };
                         if let Some(r) = r {
                             if let Some(r) = r {
@@ -3081,7 +3106,15 @@ impl<'a> ExecPass<'a> {
                                 s.insert(0, head.clone());
                                 s
                             }
-                            _ => unreachable!(),
+                            _ => {
+                                let span = self.span(&vref.loc, c.expr.span);
+                                self.errors.push(ExecError {
+                                    span: Some(span.clone()),
+                                    cell: vref.loc.cell,
+                                    kind: ExecErrorKind::InvalidType,
+                                });
+                                return Err(());
+                            }
                         };
                         self.values.insert(vid, Defer::Ready(Value::Seq(val)));
                         true
@@ -3094,7 +3127,15 @@ impl<'a> ExecPass<'a> {
                         let val = match head {
                             Value::SeqNil => Value::Nil,
                             Value::Seq(s) => s.first().cloned().unwrap_or(Value::Nil),
-                            _ => unreachable!(),
+                            _ => {
+                                let span = self.span(&vref.loc, c.expr.span);
+                                self.errors.push(ExecError {
+                                    span: Some(span.clone()),
+                                    cell: vref.loc.cell,
+                                    kind: ExecErrorKind::InvalidType,
+                                });
+                                return Err(());
+                            }
                         };
                         self.values.insert(vid, Defer::Ready(val));
                         true
@@ -3107,7 +3148,15 @@ impl<'a> ExecPass<'a> {
                         let val = match lst {
                             Value::SeqNil => Value::SeqNil,
                             Value::Seq(s) => Value::Seq(s[1..].to_vec()),
-                            _ => unreachable!(),
+                            _ => {
+                                let span = self.span(&vref.loc, c.expr.span);
+                                self.errors.push(ExecError {
+                                    span: Some(span.clone()),
+                                    cell: vref.loc.cell,
+                                    kind: ExecErrorKind::InvalidType,
+                                });
+                                return Err(());
+                            }
                         };
                         self.values.insert(vid, Defer::Ready(val));
                         true
@@ -3320,7 +3369,7 @@ impl<'a> ExecPass<'a> {
                                 .scope_annotation
                                 .as_ref()
                                 .map(|anno| anno.name.as_str()),
-                        );
+                        )?;
                         self.values.insert(vid, Defer::Ready(Value::Cell(cell)));
                         true
                     } else {
@@ -3386,7 +3435,15 @@ impl<'a> ExecPass<'a> {
                                         .collect(),
                                     constant: -v.constant,
                                 },
-                                _ => unreachable!(),
+                                _ => {
+                                    let span = self.span(&vref.loc, unary_op.expr.span);
+                                    self.errors.push(ExecError {
+                                        span: Some(span.clone()),
+                                        cell: vref.loc.cell,
+                                        kind: ExecErrorKind::InvalidType,
+                                    });
+                                    return Err(());
+                                }
                             };
                             self.values
                                 .insert(vid, DeferValue::Ready(Value::Linear(res)));
@@ -3395,7 +3452,15 @@ impl<'a> ExecPass<'a> {
                         Value::Int(v) => {
                             let res = match unary_op.op {
                                 UnaryOp::Neg => -v,
-                                _ => unreachable!(),
+                                _ => {
+                                    let span = self.span(&vref.loc, unary_op.expr.span);
+                                    self.errors.push(ExecError {
+                                        span: Some(span.clone()),
+                                        cell: vref.loc.cell,
+                                        kind: ExecErrorKind::InvalidType,
+                                    });
+                                    return Err(());
+                                }
                             };
                             self.values.insert(vid, DeferValue::Ready(Value::Int(res)));
                             true
@@ -3605,7 +3670,15 @@ impl<'a> ExecPass<'a> {
                                         Value::String("".to_string())
                                     }
                                 }
-                                f => unreachable!("invalid field `{f}`"),
+                                _ => {
+                                    let span = self.span(&vref.loc, field_access_expr.expr.span);
+                                    self.errors.push(ExecError {
+                                        span: Some(span.clone()),
+                                        cell: vref.loc.cell,
+                                        kind: ExecErrorKind::InvalidType,
+                                    });
+                                    return Err(());
+                                }
                             };
                             self.values.insert(vid, DeferValue::Ready(val));
                             true
@@ -3699,8 +3772,13 @@ impl<'a> ExecPass<'a> {
                             }
                         }
                         _ => {
-                            // Should abort compilation after VarIdTyPass; should not get here.
-                            unreachable!("field access expressions not supported on this type")
+                            let span = self.span(&vref.loc, field_access_expr.expr.span);
+                            self.errors.push(ExecError {
+                                span: Some(span),
+                                cell: vref.loc.cell,
+                                kind: ExecErrorKind::InvalidType,
+                            });
+                            return Err(());
                         }
                     }
                 } else {
@@ -3761,7 +3839,7 @@ impl<'a> ExecPass<'a> {
         if self.values[&vid].is_ready() {
             self.cell_state_mut(cell_id).deferred.swap_remove(&vid);
         }
-        progress
+        Ok(progress)
     }
 
     pub fn bbox(&self, cell: CellId) -> Option<Rect<f64>> {
@@ -4226,6 +4304,9 @@ pub enum ExecErrorKind {
     /// Edges of a rect are in the wrong order (e.g. x0 > x1 or y0 > y1).
     #[error("rect edges are in the wrong order: {0}")]
     FlippedRect(String),
+    /// Operation on an incompatible type, usually due to erroneous use of `Any`.
+    #[error("operation on an incompatible type (check usage of `Any`)")]
+    InvalidType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -4276,7 +4357,7 @@ enum PartialEvalState<T: AstMetadata> {
     Match(Box<PartialMatchExpr<T>>),
     Comparison(Box<PartialComparisonExpr<T>>),
     BinOp(PartialBinOp),
-    UnaryOp(PartialUnaryOp),
+    UnaryOp(PartialUnaryOp<T>),
     Call(Box<PartialCallExpr<T>>),
     FieldAccess(Box<PartialFieldAccessExpr<T>>),
     Constraint(PartialConstraint),
@@ -4306,9 +4387,10 @@ struct PartialBinOp {
 }
 
 #[derive(Debug, Clone)]
-struct PartialUnaryOp {
+struct PartialUnaryOp<T: AstMetadata> {
     operand: ValueId,
     op: UnaryOp,
+    expr: Box<UnaryOpExpr<Substr, T>>,
 }
 
 #[derive(Debug, Clone)]
