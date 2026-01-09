@@ -37,6 +37,19 @@ impl SpqrFactorization {
         n: usize,
     ) -> Result<Self, String> {
         unsafe {
+            if m == 0 || n == 0 {
+
+            unsafe {
+                let ptr = eigen_create(m as i32, n as i32);
+                return Ok(SpqrFactorization {
+                    ptr: ptr,
+                    m: 0,
+                    n: 0,
+                    rank: 0 as usize,
+                });
+            }
+            }
+
             let ptr = eigen_create(m as i32, n as i32);
 
             let nnz = triplet.len();
@@ -124,6 +137,9 @@ impl SpqrFactorization {
 
     ///Complete solve function; determines what path of action to take depending on dimensions of matrix A
     pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, String> {
+        if self.n == 0 {
+            return Ok(DVector::zeros(0));
+        }
         if self.m >= self.n {
             return self.solve_regular(b);
         } else {
@@ -236,6 +252,12 @@ impl SpqrFactorization {
     }
 
     pub fn get_free_indices(&self) -> Result<DVector<f64>, String> {
+        if self.n == 0 {
+            return Ok(DVector::zeros(0));
+        }
+        if self.m == 0 {
+            return Ok(DVector::zeros(self.n));
+        }
         let mut indices_mags = vec![0.0_f64; self.n];
         unsafe {
             eigen_get_free_indices(self.ptr, indices_mags.as_mut_ptr());

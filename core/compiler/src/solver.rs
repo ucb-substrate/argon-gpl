@@ -137,6 +137,9 @@ impl Solver {
         let n = new_index;
         let m = self.constraints.len();
 
+        // println!("MMMMMMMMM: {}\n", m);
+        // println!("NNNNNNNNN: {}\n", n);
+
         let triplets: Vec<(usize, usize, f64)> = old_triplets
             .into_par_iter()
             .map(|(c_index, v_index, val)| {
