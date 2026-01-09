@@ -18,6 +18,7 @@ unsafe extern "C" {
     fn eigen_get_r_dense(ptr: *mut c_void, output: *mut f64, mode: i32);
     fn eigen_get_permutation(ptr: *mut c_void, output: *mut i32, mode: i32);
     fn eigen_get_free_indices(ptr: *mut c_void, output: *mut f64);
+    fn eigen_apply_q(ptr: *mut c_void, input: *const f64, output: *mut f64, mode_mat_factor: i32, mode_transpose: i32);
 }
 
 pub struct SpqrFactorization {
@@ -134,6 +135,32 @@ impl SpqrFactorization {
         Ok(indices.into_iter().map(|x| x as usize).collect())
     }
 
+    fn apply_q_internal(&self, vec: &DVector<f64>, mode_mat_factor: i32, mode_transpose: i32) -> DVector<f64> {
+        let size = if mode_mat_factor == 0 { self.m } else { self.n };
+        let mut output = vec![0.0_f64; size];
+
+        unsafe {
+            eigen_apply_q(
+                self.ptr,
+                vec.as_ptr(),
+                output.as_mut_ptr(),
+                mode_mat_factor,
+                mode_transpose,
+            );
+        }
+
+        DVector::from_vec(output)
+    }
+
+    pub fn apply_qt(&self, b: &DVector<f64>) -> DVector<f64> {
+        self.apply_q_internal(b, 0, 0)
+    }
+
+
+    pub fn apply_q(&self, b: &DVector<f64>) -> DVector<f64> {
+        self.apply_q_internal(b, 0, 1)
+    }
+
 
     ///Complete solve function; determines what path of action to take depending on dimensions of matrix A
     pub fn solve(&self, b: &DVector<f64>) -> Result<DVector<f64>, String> {
@@ -149,12 +176,14 @@ impl SpqrFactorization {
 
     ///Solves the system and returns the least squares solution in the case where the matrix has m >= n
     pub fn solve_regular(&self, b: &DVector<f64>) -> Result<DVector<f64>, String> {
-        let q = self.qa_matrix().unwrap();
+        //let q = self.qa_matrix().unwrap();
         let r = self.ra_matrix().unwrap();
+
         let r_r = r.view((0, 0), (self.rank, self.rank));
         let perm_vec = self.permutation_a().unwrap();
 
-        let c = q.transpose() * b;
+        //let c = q.transpose() * b;
+        let c = self.apply_qt(&b);
         let c_r = c.rows(0, self.rank);
 
         let y_r = r_r.solve_upper_triangular(&c_r).expect("asdf \n");
@@ -224,8 +253,6 @@ impl SpqrFactorization {
     ///Solves the system for the underconstrained case when m < n; uses the precomputed QR of AT
     pub fn solve_underconstrained(&self, b: &DVector<f64>) -> Result<DVector<f64>, String> {
         let rank = self.rank();
-        let q = self.qat_matrix().unwrap();
-        let q_thin = q.columns(0, rank);
         let r = self.rat_matrix().unwrap();
         let perm_vec = self.permutation_at().unwrap();
 
@@ -237,9 +264,12 @@ impl SpqrFactorization {
         let r_acc = r.view((0, 0), (rank, rank));
         let c_main = c.rows(0, rank);
 
-        let y = r_acc.transpose().solve_lower_triangular(&c_main).unwrap();
+        let y_small = r_acc.transpose().solve_lower_triangular(&c_main).unwrap();
 
-        let x = q_thin * y;
+        let mut y = DVector::zeros(self.n);
+        y.rows_mut(0, rank).copy_from(&y_small);
+
+        let x = self.apply_q_internal(&y, 1, 1);
 
         Ok(x)
     }

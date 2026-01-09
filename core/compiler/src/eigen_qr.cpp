@@ -118,4 +118,23 @@ extern "C" {
             ret = ret + col.cwiseAbs();
         }
     }
+
+    void eigen_apply_q(void* ptr, double* input, double* output, int mode_mat_factor, int mode_transpose) {
+        EigenQR* qr = (EigenQR*) ptr;
+        auto& qr_mat = (mode_mat_factor == 0) ? qr->qr_a : qr->qr_at;
+        int size = (mode_mat_factor == 0) ? qr->m : qr->n;
+
+        Map<VectorXd> in_vec(input, size);
+        Map<VectorXd> out_vec(output, size);
+
+        VectorXd temp;
+
+        if (mode_transpose == 0) {
+            temp = qr_mat.matrixQ().transpose() * in_vec;
+        } else {
+            temp = qr_mat.matrixQ() * in_vec;
+        }
+
+        out_vec = temp;
+    }
 }
