@@ -5,10 +5,12 @@ pub mod gds;
 pub mod layer;
 pub mod parse;
 pub mod solver;
+pub mod spqr;
 
 #[cfg(test)]
 mod tests {
 
+    use gds21::GdsUnits;
     use std::path::PathBuf;
 
     use crate::{
