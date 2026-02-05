@@ -1,6 +1,9 @@
 # Argon
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
+> [!IMPORTANT]
+> This is a version of Argon licensed under GPL v3 due to a dependency on [SuiteSparse](https://github.com/DrTimothyAldenDavis/SuiteSparse). The main Argon repository can be found [here](https://github.com/ucb-substrate/argon).
+
 Argon is a programming language for writing constraint-based integrated circuit layout generators.
 Argon's primary feature is bidirectional editing between a code editor (Neovim or VS Code) and a custom GUI.
 Simpler geometric constraints can be entered visually in the GUI, while more complex logic can be
